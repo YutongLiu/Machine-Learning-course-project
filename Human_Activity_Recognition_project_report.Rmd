@@ -1,12 +1,12 @@
 ---
 title: "Human Activity Prediction"
 author: "YutongLIU"
-date: "2016Äê10ÔÂ8ÈÕ"
+date: "Oct 8 2016"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(message = F, error = F, warning = F,echo = T)
+knitr::opts_chunk$set(message = F, error = F, warning = F)
 ```
 
 ## Project overview
