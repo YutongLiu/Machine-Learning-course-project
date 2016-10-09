@@ -75,7 +75,7 @@ training<-pml_training[com_train,]
 
 * As the plot shows, the relationship between the outcome and most variables are non-linear. So can try random forest approach.
 
-```{R plot}
+```{R plot, results=T}
 qplot(roll_belt,total_accel_belt,colour=classe,data=training)
 ```
 
