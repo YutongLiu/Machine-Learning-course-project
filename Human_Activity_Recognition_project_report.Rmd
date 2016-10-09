@@ -1,0 +1,165 @@
+---
+title: "Human Activity Prediction"
+author: "YutongLIU"
+date: "2016Äê10ÔÂ8ÈÕ"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = F, error = F, warning = F,echo = T)
+```
+
+## Project overview
+Using wareable devices is now possible to collect a large amount of data about personal activity. In this project, our goal is to use this kind of data to predict the exercise manner, so that we can know how well they do the activity and this can help wareable device users to know their exercice performance more easily.
+
+## Data set information
+Refer to the [website](http://groupware.les.inf.puc-rio.br/har), this data set records the exercise performed by 6 male participants aged between 20-28 years old.
+
+Participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in  five different fashions: 
+
+Class|Activity
+-----|--------
+A|exactly according to the speci cation 
+B|throwing the elbows to the front
+C|lifting the dumbbell only halfway
+D|lowering the dumbbell only halfway
+E|throwing the hips to the front
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+
+> Download the data set
+
+Firstly, we downloaded and read in the data set 
+```{R download_data}
+library(caret);library(RANN);library(dplyr);library(ggplot2)
+
+#set the working directory
+if(!dir.exists("D:/Coursera/L8W4_assignment/"))
+   {dir.create("D:/Coursera/L8W4_assignment/");
+    setwd("D:/Coursera/L8W4_assignment")}
+
+#download data set
+download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile = "./pml_training.csv")
+download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile = "./pml_testing.csv")
+
+#read in the data set
+pml_training<-read.csv(file = "./pml_training.csv",header = T)
+pml_testing<-read.csv(file = "./pml_testing.csv",header = T)
+```
+
+> Preprocess the data set
+
+After loading the training data set, we take a look at it.
+
+* It contains 160 variables and 19622 observations.
+
+```{r glance of data set,results=F}
+#take a look at the data set
+str(pml_training)
+
+```
+
+* There are too many missing value, about 98% are missing value in several vector, the imputation result won't be satisfied.
+```{R count missing data, results = FALSE}
+#count missing data
+count_na<-is.na(pml_training)
+summary(count_na)
+
+```
+
+So finally we removed all these missing value.
+```{R preprocess}
+com_train<-complete.cases(pml_training)
+training<-pml_training[com_train,]
+```
+
+* As the plot shows, the relationship between the outcome and most variables are non-linear. So can try random forest approach.
+
+```{R plot}
+qplot(roll_belt,total_accel_belt,colour=classe,data=training)
+```
+
+> Extract key features
+
+```{R extract key features}
+training<-select(training,roll_belt,total_accel_belt,
+                 gyros_belt_x,gyros_belt_y,gyros_belt_z,magnet_belt_x,
+                 magnet_belt_y,magnet_belt_z,
+                 magnet_arm_x,magnet_arm_y,magnet_arm_z,accel_arm_x,
+                 accel_arm_y,accel_arm_z,total_accel_arm,
+                 total_accel_dumbbell,gyros_dumbbell_x,gyros_dumbbell_y,
+                 gyros_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,
+                 magnet_dumbbell_z,
+                 pitch_forearm,gyros_forearm_x,gyros_forearm_y,
+                 gyros_forearm_z,classe)
+
+```
+
+> Slicing the data set
+
+Using k-fold, we sliced the data set into training set and cross-validation set.
+```{R slicing data set}
+# slicing the data set into 3 folds
+set.seed(23256)
+training_kfold<-createFolds(y=training$classe,k=3,returnTrain = TRUE)
+
+training_rf1<-training[training_kfold$Fold1,]
+validation_rf1<-training[-training_kfold$Fold1,]
+
+training_rf2<-training[training_kfold$Fold2,]
+validation_rf2<-training[-training_kfold$Fold2,]
+
+training_rf3<-training[training_kfold$Fold3,]
+validation_rf3<-training[-training_kfold$Fold3,]
+```
+
+> Train the model
+
+```{R train the model}
+fitmodel_rf1<-train(classe~.,data=training_rf1,method="rf",prox=TRUE)
+fitmodel_rf2<-train(classe~.,data=training_rf2,method="rf",prox=TRUE)
+fitmodel_rf3<-train(classe~.,data=training_rf3,method="rf",prox=TRUE)
+
+```
+
+> Cross-validation
+
+```{R cross validation, results = FALSE}
+pred_cross_vali_rf1<-predict(fitmodel_rf1,validation_rf1)
+pred_cross_vali_rf2<-predict(fitmodel_rf2,validation_rf2)
+pred_cross_vali_rf3<-predict(fitmodel_rf3,validation_rf3)
+
+con_matrix_rf1<-confusionMatrix(pred_cross_vali_rf1,validation_rf1$classe)
+con_matrix_rf2<-confusionMatrix(pred_cross_vali_rf2,validation_rf2$classe)
+con_matrix_rf3<-confusionMatrix(pred_cross_vali_rf3,validation_rf3$classe)
+```
+
+> Conclusion
+
+As the confusion matrix shows, the first model identifies class A and the third one identifies class D and E better.
+
+```{R evaluation}
+con_matrix_rf1;con_matrix_rf2;con_matrix_rf3
+```
+
+
+```{R test, results = FALSE}
+testing<-select(pml_testing,roll_belt,total_accel_belt,
+                gyros_belt_x,gyros_belt_y,gyros_belt_z,magnet_belt_x,
+                magnet_belt_y,magnet_belt_z,
+                magnet_arm_x,magnet_arm_y,magnet_arm_z,accel_arm_x,
+                accel_arm_y,accel_arm_z,total_accel_arm,
+                total_accel_dumbbell,gyros_dumbbell_x,gyros_dumbbell_y,
+                gyros_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,
+                magnet_dumbbell_z,
+                pitch_forearm,gyros_forearm_x,gyros_forearm_y,gyros_forearm_z)
+
+#transforming testing data set class as same as the training data set
+for(i in 1:26){
+        class(testing[,i])<-class(training_rf1[,i])
+}
+
+pred_test_rf1<-predict(fitmodel_rf1,testing)
+pred_test_rf2<-predict(fitmodel_rf2,testing)
+pred_test_rf3<-predict(fitmodel_rf3,testing)
+```
