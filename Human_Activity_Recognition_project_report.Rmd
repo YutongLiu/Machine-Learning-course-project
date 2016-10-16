@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(message = F, error = F, warning = F)
+knitr::opts_chunk$set(message = F, error = F, warning = F,echo = TRUE)
 ```
 
 ## Project overview
@@ -30,7 +30,7 @@ Class A corresponds to the specified execution of the exercise, while the other 
 > Download the data set
 
 Firstly, we downloaded and read in the data set 
-```{R download_data}
+```{R download_data,results=FALSE}
 library(caret);library(RANN);library(dplyr);library(ggplot2)
 
 #set the working directory
@@ -53,14 +53,14 @@ After loading the training data set, we take a look at it.
 
 * It contains 160 variables and 19622 observations.
 
-```{r glance of data set,results=F}
+```{r glance of data set,results = 'hide'}
 #take a look at the data set
 str(pml_training)
 
 ```
 
 * There are too many missing value, about 98% are missing value in several vector, the imputation result won't be satisfied.
-```{R count missing data, results = FALSE}
+```{R count missing data,results="hide"}
 #count missing data
 count_na<-is.na(pml_training)
 summary(count_na)
@@ -75,7 +75,7 @@ training<-pml_training[com_train,]
 
 * As the plot shows, the relationship between the outcome and most variables are non-linear. So can try random forest approach.
 
-```{R plot, results=T}
+```{R plot,results = T}
 qplot(roll_belt,total_accel_belt,colour=classe,data=training)
 ```
 
@@ -124,6 +124,8 @@ fitmodel_rf3<-train(classe~.,data=training_rf3,method="rf",prox=TRUE)
 
 > Cross-validation
 
+To evaluate the out of sample error, we predict the outcome with  cross-validation data.
+
 ```{R cross validation, results = FALSE}
 pred_cross_vali_rf1<-predict(fitmodel_rf1,validation_rf1)
 pred_cross_vali_rf2<-predict(fitmodel_rf2,validation_rf2)
@@ -134,16 +136,17 @@ con_matrix_rf2<-confusionMatrix(pred_cross_vali_rf2,validation_rf2$classe)
 con_matrix_rf3<-confusionMatrix(pred_cross_vali_rf3,validation_rf3$classe)
 ```
 
-> Conclusion
+> Evaluate the out of sample error
 
-As the confusion matrix shows, the first model identifies class A and the third one identifies class D and E better.
+As the confusion matrix shows, the first model identifies class A and the third one identifies class D and E better. The accuracy of second model is better than another two models.
 
 ```{R evaluation}
 con_matrix_rf1;con_matrix_rf2;con_matrix_rf3
 ```
 
+> Predict the class of test set
 
-```{R test, results = FALSE}
+```{R test,results=FALSE}
 testing<-select(pml_testing,roll_belt,total_accel_belt,
                 gyros_belt_x,gyros_belt_y,gyros_belt_z,magnet_belt_x,
                 magnet_belt_y,magnet_belt_z,
