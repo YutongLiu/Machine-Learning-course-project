@@ -1,7 +1,7 @@
 ---
 title: "Human Activity Prediction"
 author: "YutongLIU"
-date: "Oct 8 2016"
+date: "Oct 19 2016"
 output: html_document
 ---
 
@@ -29,22 +29,29 @@ Class A corresponds to the specified execution of the exercise, while the other 
 
 > Download the data set
 
-Firstly, we downloaded and read in the data set 
-```{R download_data,results=FALSE}
-library(caret);library(RANN);library(dplyr);library(ggplot2)
+```{R load packages}
+library(caret)
+library(randomForest)
+library(dplyr)
+library(ggplot2)
+```
 
+Firstly, we downloaded and read in the data set. After a glance of the data, we found that there were different formats of missing value, so we re-read the data and set the NA string format.
+```{R download_data,results=FALSE}
 #set the working directory
 if(!dir.exists("D:/Coursera/L8W4_assignment/"))
    {dir.create("D:/Coursera/L8W4_assignment/");
     setwd("D:/Coursera/L8W4_assignment")}
 
 #download data set
-download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile = "./pml_training.csv")
-download.file(url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile = "./pml_testing.csv")
+url_training<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+#download data set
+download.file(url=url_training,destfile = "./pml_training.csv")
 
 #read in the data set
-pml_training<-read.csv(file = "./pml_training.csv",header = T)
-pml_testing<-read.csv(file = "./pml_testing.csv",header = T)
+pml_training<-read.csv(file = "./pml_training.csv",header = T,
+                na.strings = c(""," ","NA","#DIV/0!"))
 ```
 
 > Preprocess the data set
@@ -52,117 +59,98 @@ pml_testing<-read.csv(file = "./pml_testing.csv",header = T)
 After loading the training data set, we take a look at it.
 
 * It contains 160 variables and 19622 observations.
-
 ```{r glance of data set,results = 'hide'}
 #take a look at the data set
 str(pml_training)
-
 ```
 
-* There are too many missing value, about 98% are missing value in several vector, the imputation result won't be satisfied.
+* There are too many missing values, about 98% are missing value in several variables, so if we impute these missing values, the result won't be satisfied.
 ```{R count missing data,results="hide"}
 #count missing data
 count_na<-is.na(pml_training)
 summary(count_na)
-
 ```
 
-So finally we removed all these missing value.
-```{R preprocess}
-com_train<-complete.cases(pml_training)
-training<-pml_training[com_train,]
+These variables contain too much noisy, so finally we removed these variales.
+```{R preprocess1}
+count_na<-apply(pml_training,2,function(x) sum(is.na(x)))
+pml_training<-pml_training[,which(count_na==0)]
 ```
 
-* As the plot shows, the relationship between the outcome and most variables are non-linear. So can try random forest approach.
+Obviously the first eight variables are identifiers of each row, this kind of variable shouldn't be used as predictors, so we delete them before training model.
+```{R preprocess2}
+pml_clean<-pml_training[,8:length(pml_training)]
+```
+
+* As the plot shows, the relationship between the outcome and most variables are non-linear. So we can try some non-linear models.
 
 ```{R plot,results = T}
-qplot(roll_belt,total_accel_belt,colour=classe,data=training)
-```
-
-> Extract key features
-
-```{R extract key features}
-training<-select(training,roll_belt,total_accel_belt,
-                 gyros_belt_x,gyros_belt_y,gyros_belt_z,magnet_belt_x,
-                 magnet_belt_y,magnet_belt_z,
-                 magnet_arm_x,magnet_arm_y,magnet_arm_z,accel_arm_x,
-                 accel_arm_y,accel_arm_z,total_accel_arm,
-                 total_accel_dumbbell,gyros_dumbbell_x,gyros_dumbbell_y,
-                 gyros_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,
-                 magnet_dumbbell_z,
-                 pitch_forearm,gyros_forearm_x,gyros_forearm_y,
-                 gyros_forearm_z,classe)
-
+qplot(roll_belt,total_accel_belt,colour=classe,data=pml_clean)
 ```
 
 > Slicing the data set
 
-Using k-fold, we sliced the data set into training set and cross-validation set.
+We sliced the data set into training set and cross-validation set.
 ```{R slicing data set}
 # slicing the data set into 3 folds
-set.seed(23256)
-training_kfold<-createFolds(y=training$classe,k=3,returnTrain = TRUE)
-
-training_rf1<-training[training_kfold$Fold1,]
-validation_rf1<-training[-training_kfold$Fold1,]
-
-training_rf2<-training[training_kfold$Fold2,]
-validation_rf2<-training[-training_kfold$Fold2,]
-
-training_rf3<-training[training_kfold$Fold3,]
-validation_rf3<-training[-training_kfold$Fold3,]
+set.seed(12345)
+inTrain<-createDataPartition(y=pml_clean$classe,p=0.7,
+                             list = FALSE)
+train_set<-pml_clean[inTrain,]
+crossval_set<-pml_clean[-inTrain,]
 ```
 
 > Train the model
 
+We train the model using decision tree and also random forest.
 ```{R train the model}
-fitmodel_rf1<-train(classe~.,data=training_rf1,method="rf",prox=TRUE)
-fitmodel_rf2<-train(classe~.,data=training_rf2,method="rf",prox=TRUE)
-fitmodel_rf3<-train(classe~.,data=training_rf3,method="rf",prox=TRUE)
+#decision tree
+model_dtree<-train(classe~.,data = train_set,method="rpart")
 
+#random forest
+model_rf<-randomForest(classe~.,data=train_set)
 ```
 
-> Cross-validation
+> Predict the outcome with cross-validation set
 
-To evaluate the out of sample error, we predict the outcome with  cross-validation data.
-
-```{R cross validation, results = FALSE}
-pred_cross_vali_rf1<-predict(fitmodel_rf1,validation_rf1)
-pred_cross_vali_rf2<-predict(fitmodel_rf2,validation_rf2)
-pred_cross_vali_rf3<-predict(fitmodel_rf3,validation_rf3)
-
-con_matrix_rf1<-confusionMatrix(pred_cross_vali_rf1,validation_rf1$classe)
-con_matrix_rf2<-confusionMatrix(pred_cross_vali_rf2,validation_rf2$classe)
-con_matrix_rf3<-confusionMatrix(pred_cross_vali_rf3,validation_rf3$classe)
+We predict the outcome with different models using cross-validation data set.
+```{R predict the outcome}
+outcome_dtree<-predict(model_dtree,crossval_set)
+outcome_rf<-predict(model_rf,crossval_set)
 ```
 
 > Evaluate the out of sample error
 
-As the confusion matrix shows, the first model identifies class A and the third one identifies class D and E better. The accuracy of second model is better than another two models.
-
+From the confusion matrix, we can conclude that the random forest model can predict the class of activity and identify the common mistake types better. 
 ```{R evaluation}
-con_matrix_rf1;con_matrix_rf2;con_matrix_rf3
+#Using confusion matrix to evaluate the out of sample error
+conmatrix_dtree<-confusionMatrix(outcome_dtree,crossval_set$classe)
+conmatrix_rf<-confusionMatrix(outcome_rf,crossval_set$classe)
+```
+ 
+Model        |Accuracy
+-------------|--------
+decision tree| `r conmatrix_dtree$overall[1]`
+random forest| `r conmatrix_rf$overall[1]` 
+
+ 
+```{R evaluation result}
+conmatrix_dtree$overall;
+conmatrix_rf$overall
 ```
 
 > Predict the class of test set
 
 ```{R test,results=FALSE}
-testing<-select(pml_testing,roll_belt,total_accel_belt,
-                gyros_belt_x,gyros_belt_y,gyros_belt_z,magnet_belt_x,
-                magnet_belt_y,magnet_belt_z,
-                magnet_arm_x,magnet_arm_y,magnet_arm_z,accel_arm_x,
-                accel_arm_y,accel_arm_z,total_accel_arm,
-                total_accel_dumbbell,gyros_dumbbell_x,gyros_dumbbell_y,
-                gyros_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,
-                magnet_dumbbell_z,
-                pitch_forearm,gyros_forearm_x,gyros_forearm_y,gyros_forearm_z)
+url_testing<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url=url_testing,destfile = "./pml_testing.csv")
+pml_testing<-read.csv(file = "./pml_testing.csv",header = T,
+                      na.strings = c(""," ","NA","#DIV/0!"))
 
-#transforming testing data set class as same as the training data set
-for(i in 1:26){
-        class(testing[,i])<-class(training_rf1[,i])
-}
+# data preprocessing (same with the training data set)
+count_na<-apply(pml_testing,2,function(x) sum(is.na(x)))
+pml_testing<-pml_testing[,which(count_na==0)]
+testing_clean<-pml_testing[,8:length(pml_testing)]
 
-pred_test_rf1<-predict(fitmodel_rf1,testing)
-pred_test_rf2<-predict(fitmodel_rf2,testing)
-pred_test_rf3<-predict(fitmodel_rf3,testing)
+outcome_test<-predict(model_rf,testing_clean)
 ```
